@@ -1,4 +1,5 @@
 import math
+import datetime, time
 
 ########################################################################
 class MathToolkit:
@@ -92,6 +93,69 @@ class DummyGenerator (PatternGenerator):
             pass
         return
     pass
+########################################################################
+class IfndefDefGuardGenerator (PatternGenerator):
+    """"""
+    #----------------------------------------------------------------------
+    def __init__(self, guard):
+        """Constructor"""
+        self.mLines = '#ifndef %s\n#define %s' % (guard, guard) 
+        pass
+    #----------------------------------------------------------------------
+    def Output(self):
+        """"""
+        yield self.mLines
+        pass
+    pass
+########################################################################
+class EndifGuardGenerator (PatternGenerator):
+    """"""
+    #----------------------------------------------------------------------
+    def __init__(self, guard):
+        """Constructor"""
+        self.mLine = '#endif /* %s */' % guard
+        pass
+    #----------------------------------------------------------------------
+    def Output(self):
+        """"""
+        yield self.mLine
+        pass
+    pass    
+########################################################################
+class FileHeaderCommentGenerator (PatternGenerator):
+    """"""
+    PATTERN = """
+/*
+ * Copyright (C) 2011 Providence M. Salumu
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED AS IS AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * 
+ *  %s 
+ *  Created on: %s
+ */
+ """
+    #----------------------------------------------------------------------
+    def __init__(self, filename):
+        """Constructor"""
+        self.mFilename = filename
+        self.mDate = time.asctime ()
+        pass
+    #----------------------------------------------------------------------
+    def Output(self):
+        """"""
+        yield FileHeaderCommentGenerator.PATTERN  % (self.mFilename, self.mDate)
+        pass
+    pass    
 
 ########################################################################
 class CharGenerator (PatternGenerator):
@@ -108,7 +172,7 @@ class CharGenerator (PatternGenerator):
         while self.mLines > 0:
             yield str (self.mChar)
             self.mLines -= 1
-    
+            
 ########################################################################
 class NodeEntryGenerator (PatternGenerator):
     """"""
@@ -197,6 +261,21 @@ class Node_XXX(PatternGenerator):
     pass
 
 ########################################################################
+class StaticLinesGenerator (PatternGenerator):
+    """"""
+    #----------------------------------------------------------------------
+    def __init__(self, staticLines):
+        """Constructor"""
+        self.mStaticLines = staticLines
+        pass
+    #----------------------------------------------------------------------
+    def Output(self):
+        """"""
+        yield self.mStaticLines
+        pass
+    pass
+
+########################################################################
 class AggregateGenerator (PatternGenerator):
     """"""
     #----------------------------------------------------------------------
@@ -212,15 +291,85 @@ class AggregateGenerator (PatternGenerator):
                 yield l
         pass
     pass
-        
+pass
+
+########################################################################
+class DecHppGenerator (PatternGenerator):
+    """"""
+    PATTERN = '#  define SMUNIX_PP_DEC_%d %d'
+    #----------------------------------------------------------------------
+    def __init__(self, number):
+        """Constructor"""
+        self.mNumber = number
+        pass
+    #----------------------------------------------------------------------
+    def Output(self):
+        """"""
+        while self.mNumber >= 0:
+            if self.mNumber == 0:
+                yield DecHppGenerator.PATTERN % (self.mNumber, self.mNumber)
+            else:
+                yield DecHppGenerator.PATTERN % (self.mNumber, self.mNumber - 1)
+            self.mNumber -= 1
+            pass
+        pass
+    pass
+pass
+
+########################################################################
+class IncHppGenerator (PatternGenerator):
+    """"""
+    PATTERN = '#  define SMUNIX_PP_INC_%d %d'
+    #----------------------------------------------------------------------
+    def __init__(self, number):
+        """Constructor"""
+        self.mNumber = number
+        pass
+    #----------------------------------------------------------------------
+    def Output(self):
+        """"""
+        while self.mNumber >= 0:
+            yield IncHppGenerator.PATTERN % (self.mNumber, self.mNumber + 1)
+            self.mNumber -= 1
+            pass
+        pass
+    pass
+pass
+
 #----------------------------------------------------------------------
 def TestIsPowerOf():
     """"""
     return MathToolkit.IsPowerOf (16, 4) and MathToolkit.IsPowerOf (16, 2) and MathToolkit.IsPowerOf (9, 3) and not MathToolkit.IsPowerOf (8, 3)
 
 if __name__ == '__main__':
-    aggregateGenerator = AggregateGenerator (NodeEntryGenerator (), 
+    engines = []
+    autoRecHppGenerator = AggregateGenerator (FileHeaderCommentGenerator ('AutoRec.hpp'), 
+                                             IfndefDefGuardGenerator ('_SMUNIX_PP_AUTO_REC_HPP__'),
                                              CharGenerator ('#', 2),
-                                             Node_XXX ())
-    e = Engine(aggregateGenerator, 'AutoRec.hpp')
-    e.Run ()   
+                                             NodeEntryGenerator (), 
+                                             CharGenerator ('#', 2),
+                                             Node_XXX (),
+                                             CharGenerator ('#', 2),
+                                             EndifGuardGenerator ('_SMUNIX_PP_AUTO_REC_HPP__'))
+    engines.append (Engine(autoRecHppGenerator, 'AutoRec.hpp'))
+    decHppGenerator = AggregateGenerator (FileHeaderCommentGenerator ('Dec.hpp'), 
+                                             IfndefDefGuardGenerator ('_SMUNIX_PP_DEC_HPP__'),
+                                             CharGenerator ('#', 2),
+                                             StaticLinesGenerator ('#  define SMUNIX_PP_DEC(x) SMUNIX_PP_DEC_I(x)\n#  define SMUNIX_PP_DEC_I(x) SMUNIX_PP_DEC_ ## x'),
+                                             CharGenerator ('#', 2),
+                                             DecHppGenerator (256),
+                                             CharGenerator ('#', 2),
+                                             EndifGuardGenerator ('_SMUNIX_PP_DEC_HPP__'))
+    engines.append (Engine(decHppGenerator, 'Dec.hpp'))
+    incHppGenerator = AggregateGenerator (FileHeaderCommentGenerator ('Inc.hpp'), 
+                                             IfndefDefGuardGenerator ('_SMUNIX_PP_INC_HPP__'),
+                                             CharGenerator ('#', 2),
+                                             StaticLinesGenerator ('#  define SMUNIX_PP_INC(x) SMUNIX_PP_INC_I(x)\n#  define SMUNIX_PP_INC_I(x) SMUNIX_PP_INC_ ## x'),
+                                             CharGenerator ('#', 2),
+                                             IncHppGenerator (256),
+                                             CharGenerator ('#', 2),
+                                             EndifGuardGenerator ('_SMUNIX_PP_INC_HPP__'))
+    engines.append (Engine(incHppGenerator, 'Inc.hpp'))
+    
+    for e in engines:
+        e.Run ()
